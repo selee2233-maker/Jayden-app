@@ -1348,6 +1348,20 @@ function saveSettings() {
 // ────────────────────────────────────────────────────────────────
 // INIT
 // ────────────────────────────────────────────────────────────────
+
+// 기본 API 키 내장 — 처음 열어도 바로 작동
+(function seedDefaults() {
+  const defaults = {
+    subway_key:  '6a6f42514e66726137376f614f4b4a',
+    bus_key:     '6172aed60c2281085409b9b5dcbfd5aa31001c693903cb500895eb37b81f5d75',
+    stop_go:     '01685',
+    stop_return: '01157',
+  };
+  for (const [k, v] of Object.entries(defaults)) {
+    if (!localStorage.getItem(k)) localStorage.setItem(k, v);
+  }
+})();
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') doRefresh();
 });
