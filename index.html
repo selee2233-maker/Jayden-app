@@ -546,6 +546,7 @@
     }
     .riding-time-tag.real { color: var(--green); background: rgba(52,199,89,0.13); }
     .riding-elapsed { font-size: 11px; color: var(--text3); }
+    .riding-station { font-size: 12px; color: var(--text2); margin-top: 5px; }
 
     /* ── Board Button ── */
     .board-btn {
@@ -623,6 +624,7 @@
     <span class="riding-time-tag" id="riding-tag">예상</span>
   </div>
   <div class="riding-elapsed" id="riding-elapsed">탑승 후 0분 00초 경과</div>
+  <div class="riding-station" id="riding-station" style="display:none"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════ -->
@@ -1131,21 +1133,86 @@ async function loadBus(targetId, arsId, emptyMsg) {
 }
 
 // ────────────────────────────────────────────────────────────────
+// GPS 위치 기반 역 추적
+// ────────────────────────────────────────────────────────────────
+const LINE3_STATIONS_GO = (() => {
+  const list = [
+    { name: '가락시장',   lat: 37.4934, lng: 127.1236 },
+    { name: '경찰병원',   lat: 37.4928, lng: 127.1028 },
+    { name: '수서',      lat: 37.4857, lng: 127.1007 },
+    { name: '일원',      lat: 37.4912, lng: 127.0824 },
+    { name: '대치',      lat: 37.4940, lng: 127.0660 },
+    { name: '학여울',    lat: 37.4898, lng: 127.0539 },
+    { name: '도곡',      lat: 37.4888, lng: 127.0433 },
+    { name: '매봉',      lat: 37.4849, lng: 127.0280 },
+    { name: '양재',      lat: 37.4845, lng: 127.0339 },
+    { name: '남부터미널', lat: 37.4849, lng: 127.0172 },
+    { name: '교대',      lat: 37.4927, lng: 127.0142 },
+    { name: '고속터미널', lat: 37.5048, lng: 127.0047 },
+    { name: '잠원',      lat: 37.5118, lng: 127.0030 },
+    { name: '신사',      lat: 37.5199, lng: 127.0199 },
+    { name: '압구정',    lat: 37.5270, lng: 127.0294 },
+    { name: '옥수',      lat: 37.5406, lng: 127.0181 },
+    { name: '금호',      lat: 37.5421, lng: 127.0115 },
+    { name: '약수',      lat: 37.5507, lng: 127.0115 },
+    { name: '동대입구',  lat: 37.5578, lng: 127.0098 },
+    { name: '충무로',    lat: 37.5614, lng: 127.0008 },
+    { name: '을지로3가', lat: 37.5659, lng: 126.9912 },
+    { name: '종로3가',   lat: 37.5710, lng: 126.9919 },
+    { name: '안국',      lat: 37.5782, lng: 126.9852 },
+    { name: '경복궁',    lat: 37.5802, lng: 126.9748 },
+  ];
+  const n = list.length - 1;
+  return list.map((s, i) => ({ ...s, secToEnd: (n - i) * 120 }));
+})();
+const LINE3_STATIONS_RETURN = [...LINE3_STATIONS_GO].reverse().map((s, i) => ({ ...s, secToEnd: i * 120 }));
+
+function gpsDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function updateGPSLocation() {
+  if (!ridingInfo?.routeStations || !navigator.geolocation) return;
+  return new Promise(resolve => {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      let nearest = null, minDist = Infinity;
+      for (const s of ridingInfo.routeStations) {
+        const d = gpsDistance(lat, lng, s.lat, s.lng);
+        if (d < minDist) { minDist = d; nearest = s; }
+      }
+      if (nearest && minDist < 1200) {
+        ridingInfo.gpsStation   = nearest;
+        ridingInfo.gpsUpdatedAt = Date.now();
+        ridingInfo.gpsAccuracy  = Math.round(accuracy);
+      } else {
+        ridingInfo.gpsStation = null;
+      }
+      resolve();
+    }, () => resolve(), { enableHighAccuracy: false, timeout: 8000, maximumAge: 20000 });
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
 // RIDING MODE
 // ────────────────────────────────────────────────────────────────
 let ridingInfo = null;
 
 const RIDE_ROUTES = {
-  'sub-jangji-go':        { lineId: LINE.L8, dest: '가락시장', destLabel: '가락시장역', totalMin: 2  },
-  'sub-garak-go':         { lineId: LINE.L3, dest: '경복궁',   destLabel: '경복궁역',   totalMin: 50 },
-  'sub-gyeongbok-return': { lineId: LINE.L3, dest: '가락시장', destLabel: '가락시장역', totalMin: 50 },
-  'sub-garak-return':     { lineId: LINE.L8, dest: '장지',     destLabel: '장지역',     totalMin: 2  },
+  'sub-jangji-go':        { lineId: LINE.L8, dest: '가락시장', destLabel: '가락시장역', totalMin: 2,  routeStations: null },
+  'sub-garak-go':         { lineId: LINE.L3, dest: '경복궁',   destLabel: '경복궁역',   totalMin: 46, routeStations: LINE3_STATIONS_GO },
+  'sub-gyeongbok-return': { lineId: LINE.L3, dest: '가락시장', destLabel: '가락시장역', totalMin: 46, routeStations: LINE3_STATIONS_RETURN },
+  'sub-garak-return':     { lineId: LINE.L8, dest: '장지',     destLabel: '장지역',     totalMin: 2,  routeStations: null },
 };
 
 function boardTrain(sourceId, trainNo) {
   const route = RIDE_ROUTES[sourceId];
   if (!route) return;
-  ridingInfo = { ...route, trainNo, boardedAt: Date.now(), realRemainSec: null };
+  ridingInfo = { ...route, trainNo, boardedAt: Date.now(), realRemainSec: null, gpsStation: null };
   document.getElementById('riding-banner').classList.add('active');
   updateRidingBannerDOM();
   refreshRidingBanner();
@@ -1159,6 +1226,7 @@ function exitTrain() {
 
 async function refreshRidingBanner() {
   if (!ridingInfo) return;
+  await updateGPSLocation();
   try {
     const all = await fetchSubway(ridingInfo.dest);
     const match = all.find(it => it.btrainNo === ridingInfo.trainNo && it.subwayId === ridingInfo.lineId);
@@ -1171,16 +1239,40 @@ function updateRidingBannerDOM() {
   if (!ridingInfo) return;
   const elapsed = Math.floor((Date.now() - ridingInfo.boardedAt) / 1000);
   const estimated = Math.max(0, ridingInfo.totalMin * 60 - elapsed);
-  const dispSec = ridingInfo.realRemainSec !== null ? ridingInfo.realRemainSec : estimated;
-  const isReal = ridingInfo.realRemainSec !== null;
+
+  let dispSec, tagText, tagReal;
+  if (ridingInfo.realRemainSec !== null) {
+    dispSec = ridingInfo.realRemainSec;
+    tagText = '실시간';
+    tagReal = true;
+  } else if (ridingInfo.gpsStation && ridingInfo.gpsUpdatedAt) {
+    const age = Math.floor((Date.now() - ridingInfo.gpsUpdatedAt) / 1000);
+    dispSec = Math.max(0, ridingInfo.gpsStation.secToEnd - age);
+    tagText = `📍 위치 기반 (±${ridingInfo.gpsAccuracy}m)`;
+    tagReal = true;
+  } else {
+    dispSec = estimated;
+    tagText = '예상';
+    tagReal = false;
+  }
+
   const elMin = Math.floor(elapsed / 60);
   const elSec = String(elapsed % 60).padStart(2, '0');
   document.getElementById('riding-dest').textContent = `→ ${ridingInfo.destLabel}`;
   document.getElementById('riding-time').textContent = secToStr(dispSec);
   const tag = document.getElementById('riding-tag');
-  tag.textContent = isReal ? '실시간' : '예상';
-  tag.className = 'riding-time-tag' + (isReal ? ' real' : '');
+  tag.textContent = tagText;
+  tag.className = 'riding-time-tag' + (tagReal ? ' real' : '');
   document.getElementById('riding-elapsed').textContent = `탑승 후 ${elMin}분 ${elSec}초 경과`;
+
+  const stEl = document.getElementById('riding-station');
+  if (ridingInfo.gpsStation && ridingInfo.realRemainSec === null) {
+    const stops = Math.round(ridingInfo.gpsStation.secToEnd / 120);
+    stEl.style.display = 'block';
+    stEl.textContent = `📍 현재 ${ridingInfo.gpsStation.name}역 근처 · ${stops}정거장 남음`;
+  } else {
+    stEl.style.display = 'none';
+  }
 }
 
 // ────────────────────────────────────────────────────────────────
