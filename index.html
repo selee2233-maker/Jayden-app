@@ -488,6 +488,83 @@
 
     .help-banner strong { color: var(--text); }
 
+    /* ── Riding Banner ── */
+    .riding-banner {
+      display: none;
+      background: rgba(52,199,89,0.06);
+      border-bottom: 1px solid rgba(52,199,89,0.18);
+      padding: 12px 16px;
+    }
+    .riding-banner.active { display: block; }
+    .riding-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .riding-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--green);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .riding-dest-txt {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .riding-exit {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text3);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .riding-time-row {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      margin-bottom: 3px;
+    }
+    .riding-time-val {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--green);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+    }
+    .riding-time-tag {
+      font-size: 11px;
+      color: var(--text3);
+      padding: 2px 7px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 4px;
+    }
+    .riding-time-tag.real { color: var(--green); background: rgba(52,199,89,0.13); }
+    .riding-elapsed { font-size: 11px; color: var(--text3); }
+
+    /* ── Board Button ── */
+    .board-btn {
+      display: block;
+      width: 100%;
+      margin-top: 7px;
+      padding: 8px 14px;
+      background: rgba(52,199,89,0.07);
+      border: 1px solid rgba(52,199,89,0.18);
+      border-radius: var(--radius-sm);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .board-btn:active { background: rgba(52,199,89,0.15); }
+
     /* ── Countdown dot ── */
     .live-dot {
       display: inline-block;
@@ -532,6 +609,20 @@
 <div class="status-bar">
   <span class="last-update" id="last-update">–</span>
   <button class="refresh-btn" id="refresh-btn" onclick="manualRefresh()">↻ 새로고침</button>
+</div>
+
+<!-- ── Riding Banner ── -->
+<div class="riding-banner" id="riding-banner">
+  <div class="riding-header">
+    <span class="riding-label">🚇 탑승중</span>
+    <span class="riding-dest-txt" id="riding-dest">–</span>
+    <button class="riding-exit" onclick="exitTrain()">하차 ✕</button>
+  </div>
+  <div class="riding-time-row">
+    <span class="riding-time-val" id="riding-time">–</span>
+    <span class="riding-time-tag" id="riding-tag">예상</span>
+  </div>
+  <div class="riding-elapsed" id="riding-elapsed">탑승 후 0분 00초 경과</div>
 </div>
 
 <!-- ══════════════════════════════════════════════════ -->
@@ -864,6 +955,8 @@ setInterval(() => {
       at2.className = 'arrival-time ' + timeClass(s);
     }
   }
+  // 탑승중 배너 경과 시간 업데이트
+  if (ridingInfo) updateRidingBannerDOM();
 }, 1000);
 
 function renderTrainViz(item, lineColor, key) {
@@ -987,7 +1080,10 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
       const viz = i === 0 ? renderTrainViz(it, lineColor, key) : '';
       // renderTrainViz가 먼저 trainVizState를 업데이트하므로, 그 값으로 위쪽 시간 초기화
       const displaySec = (key && trainVizState[key]) ? trainVizState[key].remaining : sec;
-      return arrivalItem(dir, msg, displaySec, '', key) + viz;
+      const boardBtn = (i === 0 && RIDE_ROUTES[targetId] && it.btrainNo && !ridingInfo)
+        ? `<button class="board-btn" onclick="boardTrain('${targetId}','${it.btrainNo}')">🚇 탑승 → ${RIDE_ROUTES[targetId].destLabel}</button>`
+        : '';
+      return arrivalItem(dir, msg, displaySec, '', key) + viz + boardBtn;
     }).join(''));
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
@@ -1035,6 +1131,59 @@ async function loadBus(targetId, arsId, emptyMsg) {
 }
 
 // ────────────────────────────────────────────────────────────────
+// RIDING MODE
+// ────────────────────────────────────────────────────────────────
+let ridingInfo = null;
+
+const RIDE_ROUTES = {
+  'sub-jangji-go':        { lineId: LINE.L8, dest: '가락시장', destLabel: '가락시장역', totalMin: 2  },
+  'sub-garak-go':         { lineId: LINE.L3, dest: '경복궁',   destLabel: '경복궁역',   totalMin: 50 },
+  'sub-gyeongbok-return': { lineId: LINE.L3, dest: '가락시장', destLabel: '가락시장역', totalMin: 50 },
+  'sub-garak-return':     { lineId: LINE.L8, dest: '장지',     destLabel: '장지역',     totalMin: 2  },
+};
+
+function boardTrain(sourceId, trainNo) {
+  const route = RIDE_ROUTES[sourceId];
+  if (!route) return;
+  ridingInfo = { ...route, trainNo, boardedAt: Date.now(), realRemainSec: null };
+  document.getElementById('riding-banner').classList.add('active');
+  updateRidingBannerDOM();
+  refreshRidingBanner();
+}
+
+function exitTrain() {
+  ridingInfo = null;
+  document.getElementById('riding-banner').classList.remove('active');
+  doRefresh();
+}
+
+async function refreshRidingBanner() {
+  if (!ridingInfo) return;
+  try {
+    const all = await fetchSubway(ridingInfo.dest);
+    const match = all.find(it => it.btrainNo === ridingInfo.trainNo && it.subwayId === ridingInfo.lineId);
+    ridingInfo.realRemainSec = match ? (parseArvlSec(match) ?? null) : null;
+  } catch (_) {}
+  updateRidingBannerDOM();
+}
+
+function updateRidingBannerDOM() {
+  if (!ridingInfo) return;
+  const elapsed = Math.floor((Date.now() - ridingInfo.boardedAt) / 1000);
+  const estimated = Math.max(0, ridingInfo.totalMin * 60 - elapsed);
+  const dispSec = ridingInfo.realRemainSec !== null ? ridingInfo.realRemainSec : estimated;
+  const isReal = ridingInfo.realRemainSec !== null;
+  const elMin = Math.floor(elapsed / 60);
+  const elSec = String(elapsed % 60).padStart(2, '0');
+  document.getElementById('riding-dest').textContent = `→ ${ridingInfo.destLabel}`;
+  document.getElementById('riding-time').textContent = secToStr(dispSec);
+  const tag = document.getElementById('riding-tag');
+  tag.textContent = isReal ? '실시간' : '예상';
+  tag.className = 'riding-time-tag' + (isReal ? ' real' : '');
+  document.getElementById('riding-elapsed').textContent = `탑승 후 ${elMin}분 ${elSec}초 경과`;
+}
+
+// ────────────────────────────────────────────────────────────────
 // REFRESH
 // ────────────────────────────────────────────────────────────────
 async function doRefresh() {
@@ -1045,6 +1194,8 @@ async function doRefresh() {
   const now = new Date();
   document.getElementById('last-update').textContent =
     `업데이트 ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+  if (ridingInfo) refreshRidingBanner();
 
   if (mode === 'go') {
     // 지하철
