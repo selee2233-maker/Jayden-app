@@ -782,8 +782,14 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
   renderLoading(targetId);
   try {
     const all = await fetchSubway(station);
+    if (!all.length) { renderEmpty(targetId, `열차 없음 (총 ${all.length}건)`); return; }
     const items = filterSubway(all, lineId, dirKeywords);
-    if (!items.length) { renderEmpty(targetId, emptyMsg); return; }
+    if (!items.length) {
+      // 어떤 호선/방향 데이터가 왔는지 표시 (디버그)
+      const summary = all.slice(0,3).map(it => `[${it.subwayId}] ${it.trainLineNm}`).join(' / ');
+      renderEmpty(targetId, `필터 불일치. 수신: ${summary}`);
+      return;
+    }
     setEl(targetId, items.map(it => {
       const sec = parseInt(it.barvlDt) || null;
       const msg = it.arvlMsg2 || it.arvlMsg3 || '–';
