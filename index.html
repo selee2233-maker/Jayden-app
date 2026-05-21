@@ -751,6 +751,34 @@ function setMode(m) {
 // ────────────────────────────────────────────────────────────────
 // TIME HELPERS
 // ────────────────────────────────────────────────────────────────
+
+// 역간 평균 초 (노선별)
+const AVG_INTERVAL = { '1003': 100, '1008': 90 };
+
+// barvlDt=0인 arvlCd:1 열차의 실제 시간을 arvlMsg2에서 추출
+function parseArvlSec(item) {
+  const raw = parseInt(item.barvlDt) || 0;
+  if (raw > 0) return raw;
+
+  const msg = item.arvlMsg2 || '';
+
+  // "N분 M초 후" or "N분 후"
+  const t = msg.match(/(\d+)분\s*(?:(\d+)초)?/);
+  if (t) return parseInt(t[1]) * 60 + (parseInt(t[2]) || 0);
+
+  // "[N]번째 전역" → N × 역간 평균
+  const n = msg.match(/\[(\d+)\]번째/);
+  if (n) {
+    const avg = AVG_INTERVAL[item.subwayId] || 90;
+    return parseInt(n[1]) * avg;
+  }
+
+  // 도착/진입 = 0초 (곧 도착)
+  if (msg.includes('도착') || msg.includes('진입')) return 0;
+
+  return null;
+}
+
 function secToStr(sec) {
   if (sec === null || sec < 0) return '–';
   if (sec < 60)  return `${sec}초`;
@@ -834,7 +862,7 @@ setInterval(() => {
 }, 1000);
 
 function renderTrainViz(item, lineColor, key) {
-  const sec     = parseInt(item.barvlDt) || 0;
+  const sec     = parseArvlSec(item) ?? 0;
   const prev    = item.arvlMsg3 || '';
   const dest    = item.statnNm  || '';
   const trainNo = item.btrainNo || '';
@@ -933,7 +961,7 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
     }
     const lineColor = lineId === LINE.L8 ? 'var(--line8)' : 'var(--line3)';
     setEl(targetId, items.map((it, i) => {
-      const sec = parseInt(it.barvlDt) || null;
+      const sec = parseArvlSec(it);
       const msg = it.arvlMsg2 || it.arvlMsg3 || '–';
       const dir = it.trainLineNm || '';
       const viz = i === 0 ? renderTrainViz(it, lineColor, `${targetId}_0`) : '';
