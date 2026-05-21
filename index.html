@@ -851,7 +851,9 @@ setInterval(() => {
     if (st.remaining > 0) st.remaining--;
     const el = document.querySelector(`.train-viz[data-vk="${key}"]`);
     if (!el) { delete trainVizState[key]; continue; }
-    const pct = Math.max(5, Math.min(92, (1 - st.remaining / st.maxSec) * 100));
+    const pct = st.startSec > 0
+      ? Math.max(5, Math.min(92, (1 - st.remaining / st.startSec) * 100))
+      : 92;
     const car = el.querySelector('.train-viz-car');
     if (car) car.style.left = pct + '%';
     const cd = el.querySelector('.viz-countdown');
@@ -872,10 +874,21 @@ function renderTrainViz(item, lineColor, key) {
   const maxSec = Math.max(stationCount * 90, sec + 20, 60);
   // 같은 열차라면 이미 카운트다운된 값 유지 — API 갱신으로 시간이 역행하지 않도록
   const prev_st = trainVizState[key];
-  const effectiveSec = (prev_st && prev_st.trainNo === trainNo && prev_st.remaining < sec)
-    ? prev_st.remaining : sec;
-  const pct = Math.max(5, Math.min(92, (1 - effectiveSec / maxSec) * 100));
-  trainVizState[key] = { remaining: effectiveSec, maxSec, trainNo };
+  let remaining, startSec;
+  if (prev_st && prev_st.trainNo === trainNo) {
+    // 같은 열차 — remaining은 내려가기만, startSec은 처음 값 유지
+    remaining = Math.min(prev_st.remaining, sec);
+    startSec  = prev_st.startSec;
+  } else {
+    // 새 열차 — 처음부터
+    remaining = sec;
+    startSec  = sec;
+  }
+  const effectiveSec = remaining;
+  const pct = startSec > 0
+    ? Math.max(5, Math.min(92, (1 - remaining / startSec) * 100))
+    : 92;
+  trainVizState[key] = { remaining, startSec, trainNo };
   return `<div class="train-viz" data-vk="${key}" style="--viz-color:${lineColor}">
     <div class="train-viz-track">
       <span class="train-viz-lbl">${prev}</span>
