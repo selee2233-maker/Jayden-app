@@ -953,11 +953,17 @@ async function fetchSubway(station) {
   throw lastErr;
 }
 
-function filterSubway(list, lineId, dirKeywords) {
+function filterSubway(list, lineId, dirKeywords, station) {
   const byLine = list.filter(it => it.subwayId === lineId);
   const byDir  = byLine.filter(it => dirKeywords.some(k => (it.trainLineNm || '').includes(k)));
-  // 방향 필터 결과 없으면 해당 호선 전체 표시 (방향 키워드 불일치 대비)
-  return (byDir.length ? byDir : byLine).slice(0, 2);
+  const pool   = byDir.length ? byDir : byLine;
+  // 이미 이 역을 출발한 열차(barvlDt=0 + "X역 출발") 제거 — 이미 탑승 불가
+  const valid  = pool.filter(it => {
+    const msg = (it.arvlMsg2 || '').trim();
+    if (parseInt(it.barvlDt) === 0 && msg === `${station} 출발`) return false;
+    return true;
+  });
+  return (valid.length ? valid : pool).slice(0, 2);
 }
 
 async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
@@ -965,7 +971,7 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
   try {
     const all = await fetchSubway(station);
     if (!all.length) { renderEmpty(targetId, `열차 없음 (총 ${all.length}건)`); return; }
-    const items = filterSubway(all, lineId, dirKeywords);
+    const items = filterSubway(all, lineId, dirKeywords, station);
     if (!items.length) {
       // 어떤 호선/방향 데이터가 왔는지 표시 (디버그)
       const summary = all.slice(0,3).map(it => `[${it.subwayId}] ${it.trainLineNm}`).join(' / ');
