@@ -772,10 +772,10 @@ async function fetchSubway(station) {
 }
 
 function filterSubway(list, lineId, dirKeywords) {
-  return list
-    .filter(it => it.subwayId === lineId)
-    .filter(it => dirKeywords.some(k => (it.trainLineNm || '').includes(k)))
-    .slice(0, 2);
+  const byLine = list.filter(it => it.subwayId === lineId);
+  const byDir  = byLine.filter(it => dirKeywords.some(k => (it.trainLineNm || '').includes(k)));
+  // 방향 필터 결과 없으면 해당 호선 전체 표시 (방향 키워드 불일치 대비)
+  return (byDir.length ? byDir : byLine).slice(0, 2);
 }
 
 async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
@@ -787,7 +787,8 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
     setEl(targetId, items.map(it => {
       const sec = parseInt(it.barvlDt) || null;
       const msg = it.arvlMsg2 || it.arvlMsg3 || '–';
-      return arrivalItem('', msg, sec, '');
+      const dir = it.trainLineNm || '';
+      return arrivalItem(dir, msg, sec, '');
     }).join(''));
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
