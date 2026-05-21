@@ -856,10 +856,6 @@ setInterval(() => {
       : 92;
     const car = el.querySelector('.train-viz-car');
     if (car) car.style.left = pct + '%';
-    const cd = el.querySelector('.viz-countdown');
-    if (cd) { cd.textContent = fmtCountdown(st.remaining); cd.className = 'viz-countdown' + vizTimeClass(st.remaining); }
-    const at = el.querySelector('.viz-arrival');
-    if (at) at.textContent = fmtArrival(st.remaining);
     // 상단 arrival-item 시간도 동기화
     const at2 = document.querySelector(`.arrival-time[data-arrival-vk="${key}"]`);
     if (at2) {
@@ -903,10 +899,6 @@ function renderTrainViz(item, lineColor, key) {
         <span class="train-viz-car" style="left:${pct}%">🚇</span>
       </div>
       <span class="train-viz-lbl dest">${dest}</span>
-    </div>
-    <div class="train-viz-footer">
-      <span class="viz-arrival">${fmtArrival(effectiveSec)}</span>
-      <span class="viz-countdown${vizTimeClass(effectiveSec)}">${fmtCountdown(effectiveSec)}</span>
     </div>
   </div>`;
 }
