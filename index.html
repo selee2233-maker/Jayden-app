@@ -623,8 +623,8 @@
 // ────────────────────────────────────────────────────────────────
 // CONFIG
 // ────────────────────────────────────────────────────────────────
-const SUBWAY_BASE  = 'http://openapi.seoul.go.kr:8088';
-const SUBWAY_BASE2 = 'https://swopenAPI.seoul.go.kr/api/subway';
+const SUBWAY_BASE  = 'http://swopenAPI.seoul.go.kr/api/subway';
+const SUBWAY_BASE2 = 'http://openapi.seoul.go.kr:8088';
 const BUS_BASE     = 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid';
 
 // 전용 Cloudflare Worker 프록시
@@ -746,7 +746,6 @@ async function fetchSubway(station) {
   const key = cfg('subway_key');
   if (!key) throw new Error('NO_KEY');
   const enc = encodeURIComponent(station);
-  // 구형(포트8088) 먼저, 실패하면 신형 시도
   const urls = [
     `${SUBWAY_BASE}/${key}/json/realtimeStationArrival/0/10/${enc}`,
     `${SUBWAY_BASE2}/${key}/json/realtimeStationArrival/0/10/${enc}`,
@@ -756,13 +755,17 @@ async function fetchSubway(station) {
     try {
       const res = await proxyFetch(rawUrl);
       const data = await res.json();
+      if (data.realtimeArrivalList !== undefined) return data.realtimeArrivalList || [];
       if (data.errorMessage) {
         const s = data.errorMessage.status;
+        const code = data.errorMessage.code;
+        if (s === 200 || code === 'INFO-000') return data.realtimeArrivalList || [];
         if (s === 404) return [];
         if (s === 408) throw new Error('API 키 오류 — data.seoul.go.kr에서 키 확인');
         throw new Error(data.errorMessage.message || `오류 ${s}`);
       }
-      return data.realtimeArrivalList || [];
+      if (data.RESULT) throw new Error(data.RESULT.MESSAGE || data.RESULT.CODE);
+      return [];
     } catch (e) {
       if (e.message === 'NO_KEY') throw e;
       lastErr = e;
