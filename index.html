@@ -240,6 +240,72 @@
     .t-mid  { color: var(--yellow); }
     .t-ok   { color: var(--green); }
 
+    /* ── Train Progress Viz ── */
+    .train-viz {
+      margin: 3px 0 2px;
+      padding: 10px 14px 9px;
+      background: rgba(255,255,255,0.03);
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .train-viz-track {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 7px;
+    }
+    .train-viz-lbl {
+      font-size: 10px;
+      color: var(--text3);
+      min-width: 28px;
+      white-space: nowrap;
+    }
+    .train-viz-lbl.dest {
+      text-align: right;
+      color: var(--text2);
+      font-weight: 700;
+    }
+    .train-viz-rail {
+      flex: 1;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      position: relative;
+    }
+    .train-viz-rail::before,
+    .train-viz-rail::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 2px solid var(--surface);
+    }
+    .train-viz-rail::before { left: -4px; background: var(--text3); }
+    .train-viz-rail::after  { right: -4px; background: var(--viz-color, var(--text2)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--viz-color, #fff) 20%, transparent); }
+    .train-viz-car {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -65%);
+      font-size: 17px;
+      line-height: 1;
+      transition: left 1.1s linear;
+    }
+    .train-viz-time {
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      color: var(--green);
+    }
+    .train-viz-time.t-soon  { color: var(--orange); }
+    .train-viz-time.t-now   { color: var(--red); animation: tvpulse 0.8s ease infinite; }
+    @keyframes tvpulse {
+      0%,100% { opacity:1; } 50% { opacity:0.35; }
+    }
+
     /* ── Transfer connector ── */
     .transfer-connector {
       display: flex;
@@ -725,6 +791,49 @@ function renderEmpty(id, msg) {
   setEl(id, `<div class="state-msg">${msg}</div>`);
 }
 
+// ── Train Viz State ──
+const trainVizState = {};
+
+setInterval(() => {
+  for (const [key, st] of Object.entries(trainVizState)) {
+    if (st.remaining > 0) st.remaining--;
+    const el = document.querySelector(`.train-viz[data-vk="${key}"]`);
+    if (!el) { delete trainVizState[key]; continue; }
+    const pct = Math.max(5, Math.min(92, (1 - st.remaining / st.maxSec) * 100));
+    const car = el.querySelector('.train-viz-car');
+    if (car) car.style.left = pct + '%';
+    const td = el.querySelector('.train-viz-time');
+    if (td) {
+      td.textContent = st.remaining <= 0 ? '곧 도착' : st.remaining < 60 ? `${st.remaining}초` : `${Math.floor(st.remaining/60)}분 ${(st.remaining%60).toString().padStart(2,'0')}초`;
+      td.className = 'train-viz-time' + (st.remaining <= 0 ? ' t-now' : st.remaining < 60 ? ' t-soon' : '');
+    }
+  }
+}, 1000);
+
+function renderTrainViz(item, lineColor, key) {
+  const sec  = parseInt(item.barvlDt) || 0;
+  const prev = item.arvlMsg3 || '';
+  const dest = item.statnNm  || '';
+  if (!prev || !dest) return '';
+  const m = (item.arvlMsg2 || '').match(/\[(\d+)\]번째/);
+  const stationCount = m ? parseInt(m[1]) : 1;
+  const maxSec = Math.max(stationCount * 90, sec + 20, 60);
+  const pct = Math.max(5, Math.min(92, (1 - sec / maxSec) * 100));
+  const tClass = sec <= 0 ? 't-now' : sec < 60 ? 't-soon' : '';
+  const timeStr = sec <= 0 ? '곧 도착' : sec < 60 ? `${sec}초` : `${Math.floor(sec/60)}분 ${(sec%60).toString().padStart(2,'0')}초`;
+  trainVizState[key] = { remaining: sec, maxSec };
+  return `<div class="train-viz" data-vk="${key}" style="--viz-color:${lineColor}">
+    <div class="train-viz-track">
+      <span class="train-viz-lbl">${prev}</span>
+      <div class="train-viz-rail">
+        <span class="train-viz-car" style="left:${pct}%">🚇</span>
+      </div>
+      <span class="train-viz-lbl dest">${dest}</span>
+    </div>
+    <div class="train-viz-time ${tClass}">${timeStr}</div>
+  </div>`;
+}
+
 function arrivalItem(route, msg, sec, msg2) {
   const tc = timeClass(sec);
   const timeStr = secToStr(sec);
@@ -793,11 +902,13 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
       renderEmpty(targetId, `필터 불일치. 수신: ${summary}`);
       return;
     }
-    setEl(targetId, items.map(it => {
+    const lineColor = lineId === LINE.L8 ? 'var(--line8)' : 'var(--line3)';
+    setEl(targetId, items.map((it, i) => {
       const sec = parseInt(it.barvlDt) || null;
       const msg = it.arvlMsg2 || it.arvlMsg3 || '–';
       const dir = it.trainLineNm || '';
-      return arrivalItem(dir, msg, sec, '');
+      const viz = i === 0 ? renderTrainViz(it, lineColor, `${targetId}_0`) : '';
+      return arrivalItem(dir, msg, sec, '') + viz;
     }).join(''));
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
