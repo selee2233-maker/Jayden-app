@@ -4,8 +4,8 @@
   "description": "장지역-경복궁역-서울예고 실시간 교통 안내",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1117",
-  "theme_color": "#0f1117",
+  "background_color": "#110d0c",
+  "theme_color": "#110d0c",
   "icons": [
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚇</text></svg>",
