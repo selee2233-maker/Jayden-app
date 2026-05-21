@@ -834,15 +834,20 @@ setInterval(() => {
 }, 1000);
 
 function renderTrainViz(item, lineColor, key) {
-  const sec  = parseInt(item.barvlDt) || 0;
-  const prev = item.arvlMsg3 || '';
-  const dest = item.statnNm  || '';
+  const sec     = parseInt(item.barvlDt) || 0;
+  const prev    = item.arvlMsg3 || '';
+  const dest    = item.statnNm  || '';
+  const trainNo = item.btrainNo || '';
   if (!prev || !dest) return '';
   const m = (item.arvlMsg2 || '').match(/\[(\d+)\]번째/);
   const stationCount = m ? parseInt(m[1]) : 1;
   const maxSec = Math.max(stationCount * 90, sec + 20, 60);
-  const pct = Math.max(5, Math.min(92, (1 - sec / maxSec) * 100));
-  trainVizState[key] = { remaining: sec, maxSec };
+  // 같은 열차라면 이미 카운트다운된 값 유지 — API 갱신으로 시간이 역행하지 않도록
+  const prev_st = trainVizState[key];
+  const effectiveSec = (prev_st && prev_st.trainNo === trainNo && prev_st.remaining < sec)
+    ? prev_st.remaining : sec;
+  const pct = Math.max(5, Math.min(92, (1 - effectiveSec / maxSec) * 100));
+  trainVizState[key] = { remaining: effectiveSec, maxSec, trainNo };
   return `<div class="train-viz" data-vk="${key}" style="--viz-color:${lineColor}">
     <div class="train-viz-track">
       <span class="train-viz-lbl">${prev}</span>
@@ -852,8 +857,8 @@ function renderTrainViz(item, lineColor, key) {
       <span class="train-viz-lbl dest">${dest}</span>
     </div>
     <div class="train-viz-footer">
-      <span class="viz-arrival">${fmtArrival(sec)}</span>
-      <span class="viz-countdown${vizTimeClass(sec)}">${fmtCountdown(sec)}</span>
+      <span class="viz-arrival">${fmtArrival(effectiveSec)}</span>
+      <span class="viz-countdown${vizTimeClass(effectiveSec)}">${fmtCountdown(effectiveSec)}</span>
     </div>
   </div>`;
 }
