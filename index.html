@@ -860,6 +860,13 @@ setInterval(() => {
     if (cd) { cd.textContent = fmtCountdown(st.remaining); cd.className = 'viz-countdown' + vizTimeClass(st.remaining); }
     const at = el.querySelector('.viz-arrival');
     if (at) at.textContent = fmtArrival(st.remaining);
+    // 상단 arrival-item 시간도 동기화
+    const at2 = document.querySelector(`.arrival-time[data-arrival-vk="${key}"]`);
+    if (at2) {
+      const s = Math.max(0, st.remaining);
+      at2.textContent = secToStr(s);
+      at2.className = 'arrival-time ' + timeClass(s);
+    }
   }
 }, 1000);
 
@@ -904,15 +911,16 @@ function renderTrainViz(item, lineColor, key) {
   </div>`;
 }
 
-function arrivalItem(route, msg, sec, msg2) {
+function arrivalItem(route, msg, sec, msg2, vizKey) {
   const tc = timeClass(sec);
   const timeStr = secToStr(sec);
+  const vkAttr = vizKey ? ` data-arrival-vk="${vizKey}"` : '';
   return `
     <div class="arrival-item">
       <span class="arrival-route">${route}</span>
       <span class="arrival-msg">${msg}</span>
       <div>
-        <div class="arrival-time ${tc}">${timeStr}</div>
+        <div class="arrival-time ${tc}"${vkAttr}>${timeStr}</div>
         ${msg2 ? `<div class="arrival-time2">${msg2}</div>` : ''}
       </div>
     </div>`;
@@ -984,7 +992,8 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
       const msg = it.arvlMsg2 || it.arvlMsg3 || '–';
       const dir = it.trainLineNm || '';
       const viz = i === 0 ? renderTrainViz(it, lineColor, `${targetId}_0`) : '';
-      return arrivalItem(dir, msg, sec, '') + viz;
+      const vk  = i === 0 ? `${targetId}_0` : null;
+      return arrivalItem(dir, msg, sec, '', vk) + viz;
     }).join(''));
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
