@@ -626,24 +626,28 @@
 const SUBWAY_BASE = 'https://swopenAPI.seoul.go.kr/api/subway';
 const BUS_BASE    = 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid';
 
-// 프록시 여러 개 — 하나 실패하면 다음 시도
-const PROXIES = [
-  'https://corsproxy.io/?url=',
-  'https://api.allorigins.win/raw?url=',
-];
-
+// 여러 프록시를 동시에 시도 — 가장 먼저 성공한 것 사용
 async function proxyFetch(rawUrl) {
-  let lastErr;
-  for (const proxy of PROXIES) {
-    try {
-      const res = await fetch(proxy + encodeURIComponent(rawUrl), {
-        signal: AbortSignal.timeout(10000)
-      });
-      if (res.ok) return res;
-      lastErr = new Error(`HTTP ${res.status}`);
-    } catch (e) { lastErr = e; }
+  const enc = encodeURIComponent(rawUrl);
+  const candidates = [
+    `https://corsproxy.io/?${enc}`,
+    `https://api.allorigins.win/raw?url=${enc}`,
+    `https://thingproxy.freeboard.io/fetch/${rawUrl}`,
+    `https://api.codetabs.com/v1/proxy?quest=${enc}`,
+  ];
+
+  const raceWithTimeout = url => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), 12000);
+    fetch(url)
+      .then(r => { clearTimeout(timer); r.ok ? resolve(r) : reject(new Error(`${r.status}`)); })
+      .catch(e => { clearTimeout(timer); reject(e); });
+  });
+
+  try {
+    return await Promise.any(candidates.map(raceWithTimeout));
+  } catch {
+    throw new Error('네트워크 오류 — 잠시 후 새로고침 해주세요');
   }
-  throw lastErr || new Error('네트워크 오류');
 }
 
 const LINE = { L3: '1003', L8: '1008' };
