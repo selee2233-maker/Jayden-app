@@ -765,6 +765,7 @@ async function fetchSubway(station) {
   if (data.errorMessage) {
     const s = data.errorMessage.status;
     if (s === 404) return [];
+    if (s === 408) throw new Error('API 키 미승인 — data.seoul.go.kr 로그인 후 신청 현황 확인');
     throw new Error(data.errorMessage.message || `오류 ${s}`);
   }
   return data.realtimeArrivalList || [];
@@ -811,13 +812,17 @@ async function loadBus(targetId, arsId, emptyMsg) {
   renderLoading(targetId);
   try {
     const all = await fetchBus(arsId);
-    const items = all.filter(it => BUS_ROUTES.has(it.rtNm));
-    if (!items.length) { renderEmpty(targetId, emptyMsg); return; }
-    setEl(targetId, items.map(it => {
-      const sec = parseBusMsg(it.arrmsg1);
-      const msg2 = it.arrmsg2 && it.arrmsg2 !== '운행종료' ? `2번째: ${it.arrmsg2}` : '';
-      return arrivalItem(it.rtNm, it.arrmsg1 || '–', sec, msg2);
-    }).join(''));
+    if (!all.length) { renderEmpty(targetId, '이 정류장에 버스 정보 없음'); return; }
+    // 1020·1711 우선, 없으면 전체 표시 (노선 확인용)
+    const filtered = all.filter(it => BUS_ROUTES.has(it.rtNm));
+    const items = filtered.length ? filtered : all.slice(0, 5);
+    const isDebug = !filtered.length;
+    setEl(targetId, (isDebug ? '<div class="state-msg" style="font-size:11px;margin-bottom:4px">⚠️ 1020·1711 없음 — 정류장의 전체 버스:</div>' : '')
+      + items.map(it => {
+        const sec = parseBusMsg(it.arrmsg1);
+        const msg2 = it.arrmsg2 && it.arrmsg2 !== '운행종료' ? `2번째: ${it.arrmsg2}` : '';
+        return arrivalItem(it.rtNm, it.arrmsg1 || '–', sec, msg2);
+      }).join(''));
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
     else renderError(targetId, e.message);
