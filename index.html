@@ -134,9 +134,23 @@
       transition: all 0.15s;
     }
 
+    .refresh-btn {
+      transition: background 0.35s ease, color 0.35s ease, border-color 0.35s ease, transform 0.1s ease;
+    }
     .refresh-btn:hover { border-color: var(--text2); color: var(--text); }
-    .refresh-btn.spinning { animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes refresh-punch {
+      0%   { transform: scale(1); }
+      20%  { transform: scale(0.86); }
+      55%  { transform: scale(1.08); }
+      80%  { transform: scale(0.97); }
+      100% { transform: scale(1); }
+    }
+    .refresh-btn.refreshing {
+      background: var(--green);
+      color: #fff;
+      border-color: var(--green);
+      animation: refresh-punch 0.28s ease;
+    }
 
     /* ── Section ── */
     .section { padding: 14px 14px 2px; }
@@ -1281,7 +1295,7 @@ function updateRidingBannerDOM() {
 async function doRefresh() {
   if (isRefreshing) return;
   isRefreshing = true;
-  document.getElementById('refresh-btn').classList.add('spinning');
+  document.getElementById('refresh-btn').classList.add('refreshing');
 
   const now = new Date();
   document.getElementById('last-update').textContent =
@@ -1306,7 +1320,7 @@ async function doRefresh() {
   // Wait a bit before allowing re-trigger
   setTimeout(() => {
     isRefreshing = false;
-    document.getElementById('refresh-btn').classList.remove('spinning');
+    document.getElementById('refresh-btn').classList.remove('refreshing');
   }, 1500);
 }
 
