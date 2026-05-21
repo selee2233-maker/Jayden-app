@@ -624,8 +624,27 @@
 // CONFIG
 // ────────────────────────────────────────────────────────────────
 const SUBWAY_BASE = 'https://swopenAPI.seoul.go.kr/api/subway';
-const BUS_BASE    = 'https://ws.bus.go.kr/api/rest/stationinfo/getStationByUid';
-const CORS        = 'https://corsproxy.io/?url=';
+const BUS_BASE    = 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid';
+
+// 프록시 여러 개 — 하나 실패하면 다음 시도
+const PROXIES = [
+  'https://corsproxy.io/?url=',
+  'https://api.allorigins.win/raw?url=',
+];
+
+async function proxyFetch(rawUrl) {
+  let lastErr;
+  for (const proxy of PROXIES) {
+    try {
+      const res = await fetch(proxy + encodeURIComponent(rawUrl), {
+        signal: AbortSignal.timeout(10000)
+      });
+      if (res.ok) return res;
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('네트워크 오류');
+}
 
 const LINE = { L3: '1003', L8: '1008' };
 
@@ -736,9 +755,8 @@ function arrivalItem(route, msg, sec, msg2) {
 async function fetchSubway(station) {
   const key = cfg('subway_key');
   if (!key) throw new Error('NO_KEY');
-  const url = `${SUBWAY_BASE}/${key}/json/realtimeStationArrival/0/10/${encodeURIComponent(station)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const rawUrl = `${SUBWAY_BASE}/${key}/json/realtimeStationArrival/0/10/${encodeURIComponent(station)}`;
+  const res = await proxyFetch(rawUrl);
   const data = await res.json();
   if (data.errorMessage) {
     const s = data.errorMessage.status;
@@ -779,16 +797,7 @@ async function fetchBus(arsId) {
   const key = cfg('bus_key');
   if (!key) throw new Error('NO_KEY');
   const rawUrl = `${BUS_BASE}?arsId=${arsId}&ServiceKey=${key}&resultType=json`;
-
-  // Try direct HTTPS first, then CORS proxy
-  let res;
-  try {
-    res = await fetch(rawUrl, { signal: AbortSignal.timeout(6000) });
-    if (!res.ok) throw new Error(`direct ${res.status}`);
-  } catch {
-    res = await fetch(CORS + encodeURIComponent(rawUrl), { signal: AbortSignal.timeout(8000) });
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await proxyFetch(rawUrl);
   const data = await res.json();
   return data?.msgBody?.itemList || [];
 }
