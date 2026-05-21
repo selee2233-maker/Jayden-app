@@ -135,7 +135,7 @@
     }
 
     .refresh-btn {
-      transition: background 0.35s ease, color 0.35s ease, border-color 0.35s ease, transform 0.1s ease;
+      transition: color 0.3s ease, border-color 0.3s ease;
     }
     .refresh-btn:hover { border-color: var(--text2); color: var(--text); }
     @keyframes refresh-punch {
@@ -145,11 +145,19 @@
       80%  { transform: scale(0.97); }
       100% { transform: scale(1); }
     }
+    @keyframes sweep-reveal {
+      from { -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+      to   { -webkit-mask-position:   0% 0; mask-position:   0% 0; }
+    }
     .refresh-btn.refreshing {
-      background: var(--green);
-      color: #fff;
-      border-color: var(--green);
-      animation: refresh-punch 0.28s ease;
+      background: linear-gradient(90deg, #3b82f6, #10b981, #f59e0b);
+      color: white;
+      border-color: transparent;
+      -webkit-mask-image: linear-gradient(90deg, #000 50%, transparent 50%);
+      mask-image: linear-gradient(90deg, #000 50%, transparent 50%);
+      -webkit-mask-size: 200% 100%;
+      mask-size: 200% 100%;
+      animation: refresh-punch 0.28s ease, sweep-reveal 0.45s ease forwards;
     }
 
     /* ── Section ── */
