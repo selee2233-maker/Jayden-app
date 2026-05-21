@@ -991,9 +991,11 @@ async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
       const sec = parseArvlSec(it);
       const msg = it.arvlMsg2 || it.arvlMsg3 || '–';
       const dir = it.trainLineNm || '';
-      const viz = i === 0 ? renderTrainViz(it, lineColor, `${targetId}_0`) : '';
-      const vk  = i === 0 ? `${targetId}_0` : null;
-      return arrivalItem(dir, msg, sec, '', vk) + viz;
+      const key = i === 0 ? `${targetId}_0` : null;
+      const viz = i === 0 ? renderTrainViz(it, lineColor, key) : '';
+      // renderTrainViz가 먼저 trainVizState를 업데이트하므로, 그 값으로 위쪽 시간 초기화
+      const displaySec = (key && trainVizState[key]) ? trainVizState[key].remaining : sec;
+      return arrivalItem(dir, msg, displaySec, '', key) + viz;
     }).join(''));
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
