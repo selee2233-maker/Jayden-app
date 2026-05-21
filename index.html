@@ -857,6 +857,7 @@ const BUS_ROUTES = new Set(['1020', '1711']);
 let mode = 'go';
 let refreshTimer = null;
 let isRefreshing = false;
+const lastValidHtml = {}; // 마지막 정상 데이터 캐시
 
 function cfg(key, fallback = '') {
   return localStorage.getItem(key) || fallback;
@@ -1095,34 +1096,33 @@ function filterSubway(list, lineId, dirKeywords, station) {
 }
 
 async function loadSubway(targetId, station, lineId, dirKeywords, emptyMsg) {
-  renderLoading(targetId);
+  if (!lastValidHtml[targetId]) renderLoading(targetId);
   try {
     const all = await fetchSubway(station);
-    if (!all.length) { renderEmpty(targetId, `열차 없음 (총 ${all.length}건)`); return; }
-    const items = filterSubway(all, lineId, dirKeywords, station);
+    const items = all.length ? filterSubway(all, lineId, dirKeywords, station) : [];
     if (!items.length) {
-      // 어떤 호선/방향 데이터가 왔는지 표시 (디버그)
-      const summary = all.slice(0,3).map(it => `[${it.subwayId}] ${it.trainLineNm}`).join(' / ');
-      renderEmpty(targetId, `필터 불일치. 수신: ${summary}`);
+      if (!lastValidHtml[targetId]) renderEmpty(targetId, '열차 정보 없음');
       return;
     }
     const lineColor = lineId === LINE.L8 ? 'var(--line8)' : 'var(--line3)';
-    setEl(targetId, items.map((it, i) => {
+    const html = items.map((it, i) => {
       const sec = parseArvlSec(it);
       const msg = it.arvlMsg2 || it.arvlMsg3 || '–';
       const dir = it.trainLineNm || '';
       const key = i === 0 ? `${targetId}_0` : null;
       const viz = i === 0 ? renderTrainViz(it, lineColor, key) : '';
-      // renderTrainViz가 먼저 trainVizState를 업데이트하므로, 그 값으로 위쪽 시간 초기화
       const displaySec = (key && trainVizState[key]) ? trainVizState[key].remaining : sec;
       const boardBtn = (i === 0 && RIDE_ROUTES[targetId] && it.btrainNo && !ridingInfo)
         ? `<button class="board-btn" onclick="boardTrain('${targetId}','${it.btrainNo}')">🚇 탑승 → ${RIDE_ROUTES[targetId].destLabel}</button>`
         : '';
       return arrivalItem(dir, msg, displaySec, '', key) + viz + boardBtn;
-    }).join(''));
+    }).join('');
+    lastValidHtml[targetId] = html;
+    setEl(targetId, html);
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
-    else renderError(targetId, e.message);
+    else if (!lastValidHtml[targetId]) renderError(targetId, e.message);
+    // 캐시 있으면 에러 무시 — 마지막 정상 화면 유지
   }
 }
 
@@ -1145,23 +1145,28 @@ async function fetchBus(arsId) {
 
 async function loadBus(targetId, arsId, emptyMsg) {
   if (!arsId) { renderError(targetId, '정류장 ID가 설정되지 않았습니다 (⚙️ 설정)'); return; }
-  renderLoading(targetId);
+  if (!lastValidHtml[targetId]) renderLoading(targetId);
   try {
     const all = await fetchBus(arsId);
-    if (!all.length) { renderEmpty(targetId, '이 정류장에 버스 정보 없음'); return; }
-    // 1020·1711 우선, 없으면 전체 표시 (노선 확인용)
     const filtered = all.filter(it => BUS_ROUTES.has(it.rtNm));
     const items = filtered.length ? filtered : all.slice(0, 5);
+    if (!items.length) {
+      if (!lastValidHtml[targetId]) renderEmpty(targetId, '이 정류장에 버스 정보 없음');
+      return;
+    }
     const isDebug = !filtered.length;
-    setEl(targetId, (isDebug ? '<div class="state-msg" style="font-size:11px;margin-bottom:4px">⚠️ 1020·1711 없음 — 정류장의 전체 버스:</div>' : '')
+    const html = (isDebug ? '<div class="state-msg" style="font-size:11px;margin-bottom:4px">⚠️ 1020·1711 없음 — 정류장의 전체 버스:</div>' : '')
       + items.map(it => {
         const sec = parseBusMsg(it.arrmsg1);
         const msg2 = it.arrmsg2 && it.arrmsg2 !== '운행종료' ? `2번째: ${it.arrmsg2}` : '';
         return arrivalItem(it.rtNm, it.arrmsg1 || '–', sec, msg2);
-      }).join(''));
+      }).join('');
+    lastValidHtml[targetId] = html;
+    setEl(targetId, html);
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
-    else renderError(targetId, e.message);
+    else if (!lastValidHtml[targetId]) renderError(targetId, e.message);
+    // 캐시 있으면 에러 무시 — 마지막 정상 화면 유지
   }
 }
 
