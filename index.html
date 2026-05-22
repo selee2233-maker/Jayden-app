@@ -1137,7 +1137,8 @@ async function fetchBus(arsId) {
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); } catch { throw new Error('응답 파싱 오류: ' + text.slice(0, 80)); }
-  // 두 가지 응답 구조 모두 처리
+  const hdr = data?.ServiceResult?.msgHeader || data?.msgHeader;
+  if (hdr?.headerCd === '7' || hdr?.headerCd === 7) throw new Error('BUS_KEY_PENDING');
   return data?.ServiceResult?.msgBody?.itemList
       || data?.msgBody?.itemList
       || [];
@@ -1165,6 +1166,8 @@ async function loadBus(targetId, arsId, emptyMsg) {
     setEl(targetId, html);
   } catch (e) {
     if (e.message === 'NO_KEY') renderNoKey(targetId);
+    else if (e.message === 'BUS_KEY_PENDING')
+      renderError(targetId, '🕐 버스 API 키 승인 대기 중 (data.go.kr, 1~3 영업일 소요)');
     else if (!lastValidHtml[targetId]) renderError(targetId, e.message);
     // 캐시 있으면 에러 무시 — 마지막 정상 화면 유지
   }
